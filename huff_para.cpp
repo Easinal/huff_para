@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <ctime>
 #include <queue>
+#include <string>
 #include <parlay/sequence.h>
 #include <parlay/parallel.h>
 #include <parlay/primitives.h>
@@ -31,6 +32,11 @@ timer t_findindex;
 timer t_merge;
 timer t_add;
 
+struct NODE{
+  int index;
+  data_type value;
+
+};
 
 void printArray(sequence<data_type> &arr, int size, int start=0){
 	for(int i=start;i<start+size;++i){
@@ -74,29 +80,24 @@ int buildHeapLayer(data_type Freq, sequence<data_type> &NodeArray, sequence<int>
 	int leafIndex = lower_bound(NodeArray.begin()+progLeaf,NodeArray.begin()+ARRAYSIZE,Freq+1)-NodeArray.begin();
 	int interIndex = lower_bound(NodeArray.begin()+ARRAYSIZE+progInter,NodeArray.begin()+ARRAYSIZE+interSize,Freq+1)-NodeArray.begin();
   t_findindex.stop();
+
   t_merge.start();
-  sequence<int> leafSeq(max(1,leafIndex-progLeaf));
-	sequence<int> interSeq(max(1,interIndex-ARRAYSIZE-progInter));	
+  sequence<NODE> leafSeq(max(1,leafIndex-progLeaf));
+	sequence<NODE> interSeq(max(1,interIndex-ARRAYSIZE-progInter));	
 	parallel_for(0, leafIndex-progLeaf, [&](int i){
-		leafSeq[i] = i+progLeaf;
+		leafSeq[i].index = i+progLeaf;
+    leafSeq[i].value = NodeArray[i+progLeaf];
 	});
 	parallel_for(0, interIndex-progInter-ARRAYSIZE, [&](int i){
-		interSeq[i] = i+ARRAYSIZE+progInter;
+		interSeq[i].index = i+ARRAYSIZE+progInter;
+    interSeq[i].value = NodeArray[ARRAYSIZE+progInter+i];
 	});
-  #ifdef TEST
-  cout<<"***"<<"interIndex:"<<interIndex<<"  progInter:"<<progInter+ARRAYSIZE<<endl;
-	cout<<"leafSeq:"<<endl;
-  printArray(leafSeq,leafIndex-progLeaf);
-  cout<<"interSeq:"<<endl;
-  printArray(interSeq,interIndex-ARRAYSIZE-progInter);
-  cout<<"***"<<endl;
-  #endif
-	auto mid = merge(leafSeq.cut(0,leafIndex-progLeaf),interSeq.cut(0,interIndex-ARRAYSIZE-progInter),[&](int a, int b){return NodeArray[a]<NodeArray[b];});
+	auto mid = merge(leafSeq.cut(0,leafIndex-progLeaf),interSeq.cut(0,interIndex-ARRAYSIZE-progInter),[&](NODE a, NODE b){return a.value<b.value;});
 	progLeaf=leafIndex;
   progInter=interIndex-ARRAYSIZE;
 	
 	if(mid.size()%2==1){
-		if(mid[mid.size()-1]<ARRAYSIZE)progLeaf--;
+		if(mid[mid.size()-1].index<ARRAYSIZE)progLeaf--;
 		else progInter--;
 	}
   t_merge.stop();
@@ -110,13 +111,13 @@ int buildHeapLayer(data_type Freq, sequence<data_type> &NodeArray, sequence<int>
 	int addSize = mid.size()/2;
 	
 	parallel_for(0, addSize, [&](int i){
-		leftSeq[interSize+i]=mid[2*i];
-		rightSeq[interSize+i]=mid[2*i+1];
-		NodeArray[startPoint+i]=NodeArray[mid[2*i]]+NodeArray[mid[2*i+1]];
+		leftSeq[interSize+i]=mid[2*i].index;
+		rightSeq[interSize+i]=mid[2*i+1].index;
+		NodeArray[startPoint+i]=mid[2*i].value+mid[2*i+1].value;
 	});
   interSize+=addSize;
 	t_add.stop();
-	return 0;
+	return addSize;
 }
 
 bool accuracyTest(sequence<data_type> &NodeArray){
@@ -124,7 +125,6 @@ bool accuracyTest(sequence<data_type> &NodeArray){
   int progInter=0, progLeaf=0;
   int interSize=0;
   vector<data_type> SeqArray(ARRAYSIZE-1);
-  timer t;
   while(progInter!=ARRAYSIZE-2){
     int flag=0;
     data_type k;
@@ -158,31 +158,40 @@ bool accuracyTest(sequence<data_type> &NodeArray){
     }
     if(flag==3)progInter+=2;
   }
-	t.stop();
-	cout << "sequential time: " << t.get_total() << endl;
-    if(ans==total)return true;
+	
+	if(ans==total)return true;
 	return false;
 }
 
 int main(){
-  //while(1){
+  int ROUND = 5;
+  t_minheap.reset();
+  t_findindex.reset();
+  t_merge.reset();
+  t_add.reset();
+  timer t;
+  t.reset();
+  timer t_seq;
+  t_seq.reset();
+
+  for(int i=ROUND;i>0;--i){
     sequence<data_type> NodeArray(2*ARRAYSIZE-1);
     sequence<int> leftSeq(ARRAYSIZE);
     sequence<int> rightSeq(ARRAYSIZE);
     int progLeaf = 0, progInter = 0;
     int interSize = 0;
-    t_minheap.reset();
-    t_findindex.reset();
-    t_merge.reset();
-    t_add.reset();
+    int layer = 0;
     printf("init\n");
     initRandomArray(NodeArray,ARRAYSIZE,MINFREQ,MAXFREQ);
     //printArray(NodeArray,ARRAYSIZE);
     printf("start\n");
-    timer t; t.start();
+    //timer t_timer;
+    t.start();
     while(progInter!=ARRAYSIZE-2){
       data_type minFreq = findMinHeap(NodeArray, progLeaf, progInter, interSize);  
       buildHeapLayer(minFreq, NodeArray, leftSeq, rightSeq, progLeaf, progInter, interSize);
+      layer++;
+      //t_timer.next("Round "+to_string(layer)+"--AddSize "+to_string(addSize));
       #ifdef TEST
       printArray(NodeArray,interSize,ARRAYSIZE);
       printf("array: ");
@@ -198,19 +207,24 @@ int main(){
     printArray(rightSeq,ARRAYSIZE-1);
     #endif
     total = reduce(NodeArray.cut(ARRAYSIZE,2*ARRAYSIZE-1));
-	  cout<<"total:"<<total<<endl;
-    cout<<"Find min heap time: "<<t_minheap.get_total()<<endl;
-    cout<<"Find index time: "<<t_findindex.get_total()<<endl;
-    cout<<"Merge Sequence time: "<<t_merge.get_total()<<endl;
-    cout<<"Add up time: "<<t_add.get_total()<<endl;
-    cout<<"parallel time: "<<t.get_total()<<endl;
+    t_seq.start();
     bool result=accuracyTest(NodeArray);
-    cout<<boolalpha<<result<<endl;
-    /*if(!result){
-      cout<<"seed:"<<itr<<endl;
+    t_seq.stop();
+    
+    if(!result){
+      cout<<"WRONG ANSWER"<<endl;
       break;
-    }*/
-    //++itr;
-  //}
+    }
+  }
+
+  cout<<"total:"<<total/ROUND<<endl;
+  cout<<"Find min heap time: "<<t_minheap.get_total()/ROUND<<endl;
+  cout<<"Find index time: "<<t_findindex.get_total()/ROUND<<endl;
+  cout<<"Merge Sequence time: "<<t_merge.get_total()/ROUND<<endl;
+  cout<<"Add up time: "<<t_add.get_total()/ROUND<<endl;
+  cout<<"parallel time: "<<t.get_total()/ROUND<<endl;
+
+  cout<<"sequential time: "<<t_seq.get_total()/ROUND<<endl;
+
 	return 0;
 }
