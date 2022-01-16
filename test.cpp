@@ -49,9 +49,9 @@ void printArray(sequence<data_type> &arr, int size, int start=0){
 void initRandomArray(sequence<data_type> &arr, int size, data_type min, data_type max){
 	//srand(seed);
 	parallel_for(0, size, [&](int i){
-		arr[i]=min+hash32(i)%(max-min);
+		arr[i]=hash32(i);
 	});
-	sort_inplace(arr.cut(0,size));
+	// sort_inplace(arr.cut(0,size));
 }
 
 data_type findMinHeap(sequence<data_type> &NodeArray, int &progLeaf, int &progInter, int &interSize){
@@ -162,69 +162,26 @@ bool accuracyTest(sequence<data_type> &NodeArray){
 }
 
 int main(){
-  int ROUND = 5;
-  t_minheap.reset();
-  t_findindex.reset();
-  t_merge.reset();
-  t_add.reset();
-  timer t;
-  t.reset();
-  timer t_seq;
-  t_seq.reset();
-
+  int ROUND = 3;
+  timer t_timer;
+  t_timer.reset();
+  sequence<data_type> NodeArray(2*ARRAYSIZE-1);
+  sequence<data_type> leftSeq(ARRAYSIZE);
+  sequence<data_type> rightSeq(ARRAYSIZE*2);
+  printf("init\n");
+    //initRandomArray(leftSeq,ARRAYSIZE,  MINFREQ,MAXFREQ);
+  initRandomArray(rightSeq,2*ARRAYSIZE,  MINFREQ,MAXFREQ);
+  //printArray(NodeArray,ARRAYSIZE);
+  printf("start\n");
   for(int i=0;i<ROUND;++i){
-    sequence<data_type> NodeArray(2*ARRAYSIZE-1);
-    sequence<int> leftSeq(ARRAYSIZE);
-    sequence<int> rightSeq(ARRAYSIZE);
-    int progLeaf = 0, progInter = 0;
-    int interSize = 0;
-    int layer = 0;
-    printf("init\n");
-    initRandomArray(NodeArray,ARRAYSIZE,MINFREQ,MAXFREQ);
-    //printArray(NodeArray,ARRAYSIZE);
-    printf("start\n");
-    timer t_timer;
-    t.start();
-    while(progInter!=ARRAYSIZE-2){
-      bool flag = false;
-      //if(layer==15 || layer==16 || layer==17)flag=true;
-      data_type minFreq = findMinHeap(NodeArray, progLeaf, progInter, interSize);  
-      int addSize = buildHeapLayer(minFreq, NodeArray, leftSeq, rightSeq, progLeaf, progInter, interSize, flag);
-      layer++;
-      //t_timer.next("Round "+to_string(layer)+"--AddSize "+to_string(addSize));
-      #ifdef TEST
-      printArray(NodeArray,interSize,ARRAYSIZE);
-      printf("array: ");
-      for(int i = 0; i < 2*ARRAYSIZE; i++) {
-        printf("%d ", NodeArray[i]);
-      }
-      puts("");
-      #endif
-    }
-    t.stop();
-    #ifdef TEST
-    printArray(leftSeq,ARRAYSIZE-1);
-    printArray(rightSeq,ARRAYSIZE-1);
-    #endif
-    total = reduce(NodeArray.cut(ARRAYSIZE,2*ARRAYSIZE-1));
-    t_seq.start();
-    bool result=accuracyTest(NodeArray);
-    t_seq.stop();
-    
-    if(!result){
-      cout<<"WRONG ANSWER"<<endl;
-      break;
-    }
-  }
+    t_timer.reset();
+    t_timer.start();
+    parallel_for(0, ARRAYSIZE, [&](int j){
+      leftSeq[j]=rightSeq[2*j]+rightSeq[2*j+1];
+    });
+    t_timer.stop();
+    cout<<"ROUND "<<i<<" ADD UP TIME: "<<t_timer.get_total()<<endl;
+ }
 
-  cout<<"total:"<<total/ROUND<<endl;
-  cout<<"Find min heap time: "<<t_minheap.get_total()/ROUND<<endl;
-  cout<<"Find index time: "<<t_findindex.get_total()/ROUND<<endl;
-  cout<<"Merge Sequence time: "<<t_merge.get_total()/ROUND<<endl;
-  cout<<"Add up time: "<<t_add.get_total()/ROUND<<endl;
-  cout<<"parallel time: "<<t.get_total()/ROUND<<endl;
-
-  cout<<"sequential time: "<<t_seq.get_total()/ROUND<<endl;
-
-	return 0;
+ return 0;
 }
