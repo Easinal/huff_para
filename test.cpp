@@ -14,9 +14,9 @@
 #include "get_time.h"
 
 
-#define ARRAYSIZE 1000000000
+#define ARRAYSIZE 100000000
 #define MINFREQ 1
-#define MAXFREQ 100000
+#define MAXFREQ 100
 #define GRANULARITY 1024
 //#define TEST
 
@@ -46,12 +46,13 @@ void printArray(sequence<data_type> &arr, int size, int start=0){
 	cout<<endl;
 }
 
-void initRandomArray(sequence<data_type> &arr, int size, data_type min, data_type max){
+void initRandomArray(sequence<data_type> &arr, int size, data_type min, data_type max, int seed = 0){
 	//srand(seed);
 	parallel_for(0, size, [&](int i){
-		arr[i]=hash32(i);
+		arr[i]=hash32(i+seed*size);
+    //arr[i]=MINFREQ+rand()%(MAXFREQ-MINFREQ);
 	});
-	// sort_inplace(arr.cut(0,size));
+	sort_inplace(arr.cut(0,size));
 }
 
 data_type findMinHeap(sequence<data_type> &NodeArray, int &progLeaf, int &progInter, int &interSize){
@@ -161,27 +162,119 @@ bool accuracyTest(sequence<data_type> &NodeArray){
 	return false;
 }
 
+void paraMerge(sequence<data_type> &arr1, sequence<data_type> &arr2, sequence<data_type> &arr3, int left1, int right1, int left2, int right2, int left3, int dep=0){
+  int addSize;
+  if((right1+right2-left1-left2)%2==1){
+  //if((left3==ARRAYSIZE-1)){
+  // cout<<"ARR1: left1: "<<left1<<" right1: "<<right1<<endl;
+  // printArray(arr1,right1-left1,left1);
+  // cout<<"ARR2: left2: "<<left2<<" right2: "<<right2<<endl;
+  // printArray(arr2,right2-left2,left2);
+  // cout<<"ARR3: left3: "<<left3<<endl;
+  // printArray(arr3,left3);
+  }
+  if((left1==right1-1)&&(left2==right2-1)){
+    arr3[left3]=arr1[left1]+arr2[left2];
+    return;
+  }
+  if(left1==right1){
+    addSize=(right2-left2)/2;
+    parallel_for(0,addSize,[&](int i){
+      arr3[left3+i]=arr2[left2+2*i]+arr2[left2+2*i+1];
+    });
+    return;
+  }
+  if(left2==right2){
+    addSize=(right1-left1)/2;
+    parallel_for(0,addSize,[&](int i){
+      arr3[left3+i]=arr1[left1+2*i]+arr1[left1+2*i+1];
+    });
+    return;
+  }
+  int mid = (left1+right1-1)/2;
+  int index = lower_bound(arr2.begin()+left2,arr2.begin()+right2,arr1[mid])-arr2.begin();
+  if(mid==left1 &&index==left2){
+    if(mid+1==right1||arr1[mid+1]>arr2[index]){
+      index++;
+    }else{
+      mid++;
+    }
+  }
+  if(mid==left1 &&index==right2){
+    int gap = right1-left1;
+    if(gap%2==0){
+      mid--;
+    }else{
+      index--;
+    }
+  }
+  //cout<<"pivot: "<<mid<<"--"<<arr1[mid]<<endl;
+  if((index+mid-left1-left2)%2==0){
+    paraMerge(arr1,arr2,arr3,left1,mid,left2,index,left3,dep+1);
+    paraMerge(arr1,arr2,arr3,mid,right1,index,right2,left3+(index+mid-left1-left2)/2,dep+1);
+    return;
+  }
+  else{
+    paraMerge(arr1,arr2,arr3,left1,mid+1,left2,index,left3,dep+1);
+    paraMerge(arr1,arr2,arr3,mid+1,right1,index,right2,left3+(index+mid-left1-left2+1)/2,dep+1);
+  }
+  /*
+  if((index+mid-left1-left2)%2==0){
+    auto A = [&]() {
+      paraMerge(arr1,arr2,arr3,left1,mid,left2,index,left3);
+    };
+    auto B = [&]() {
+      paraMerge(arr1,arr2,arr3,mid,right1,index,right2,left3+(index+mid-left1-left2)/2);
+    };
+    par_do(A, B);
+  }
+  else{
+    auto A = [&]() {
+      paraMerge(arr1,arr2,arr3,left1,mid-1,left2,index,left3);
+    };
+    auto B = [&]() {
+      paraMerge(arr1,arr2,arr3,mid-1,right1,index,right2,left3+(index+mid-left1-left2-1)/2);
+    };
+    par_do(A, B);
+  }
+  */
+  return;
+}
+
 int main(){
-  int ROUND = 3;
+  int ROUND = 1;
   timer t_timer;
   t_timer.reset();
-  sequence<data_type> NodeArray(2*ARRAYSIZE-1);
+  sequence<data_type> NodeArray(2*ARRAYSIZE);
   sequence<data_type> leftSeq(ARRAYSIZE);
-  sequence<data_type> rightSeq(ARRAYSIZE*2);
+  sequence<data_type> rightSeq(ARRAYSIZE);
   printf("init\n");
-    //initRandomArray(leftSeq,ARRAYSIZE,  MINFREQ,MAXFREQ);
-  initRandomArray(rightSeq,2*ARRAYSIZE,  MINFREQ,MAXFREQ);
-  //printArray(NodeArray,ARRAYSIZE);
+  initRandomArray(leftSeq,ARRAYSIZE,  MINFREQ,MAXFREQ,1);
+  initRandomArray(rightSeq,ARRAYSIZE,  MINFREQ,MAXFREQ,2);
+  //printArray(leftSeq,ARRAYSIZE);
+  //printArray(rightSeq,ARRAYSIZE);
   printf("start\n");
+  
+  auto mid = merge(leftSeq,rightSeq,[&](data_type a, data_type  b){return a<b;});
+  int startPoint = ARRAYSIZE;
+  parallel_for(0, ARRAYSIZE, [&](int i){
+    NodeArray[startPoint+i]=mid[i<<1]+mid[i<<1|1];
+  }, GRANULARITY);
+  // printArray(mid,2*ARRAYSIZE);
+
   for(int i=0;i<ROUND;++i){
     t_timer.reset();
     t_timer.start();
-    parallel_for(0, ARRAYSIZE, [&](int j){
-      leftSeq[j]=rightSeq[2*j]+rightSeq[2*j+1];
-    });
+    paraMerge(leftSeq,rightSeq,NodeArray,0,ARRAYSIZE,0,ARRAYSIZE,0);
     t_timer.stop();
-    cout<<"ROUND "<<i<<" ADD UP TIME: "<<t_timer.get_total()<<endl;
- }
-
+    //printArray(NodeArray,2*ARRAYSIZE);
+   }
+  for(int i=0;i<ARRAYSIZE;++i){
+    if(NodeArray[i]!=NodeArray[ARRAYSIZE+i]){
+      cout<<"FALSE"<<endl;
+      return 0;
+    }
+  }
+  cout<<"TRUE"<<endl;
  return 0;
 }

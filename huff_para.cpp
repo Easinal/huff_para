@@ -76,6 +76,65 @@ data_type findMinHeap(sequence<data_type> &NodeArray, int &progLeaf, int &progIn
 	return minFreq;
 }
 
+void paraMerge(sequence<data_type> &arr, int left1, int right1, int left2, int right2, int left3){
+  int addSize;
+  if((left1==right1-1)&&(left2==right2-1)){
+    arr[left3]=arr[left1]+arr[left2];
+    return;
+  }
+  if(left1==right1){
+    addSize=(right2-left2)/2;
+    parallel_for(0,addSize,[&](int i){
+      arr[left3+i]=arr[left2+2*i]+arr[left2+2*i+1];
+    });
+    return;
+  }
+  if(left2==right2){
+    addSize=(right1-left1)/2;
+    parallel_for(0,addSize,[&](int i){
+      arr[left3+i]=arr[left1+2*i]+arr[left1+2*i+1];
+    });
+    return;
+  }
+  int mid = (left1+right1-1)/2;
+  int index = lower_bound(arr.begin()+left2,arr.begin()+right2,arr[mid])-arr.begin();
+  if(mid==left1 &&index==left2){
+    if(mid+1==right1||arr[mid+1]>arr[index]){
+      index++;
+    }else{
+      mid++;
+    }
+  }
+   
+  if(mid==left1 &&index==right2){
+    int gap = right1-left1;
+    if(gap%2==0){
+      mid--;
+    }else{
+      index--;
+    }
+  }
+  if((index+mid-left1-left2)%2==0){
+    auto A = [&]() {
+      paraMerge(arr,left1,mid,left2,index,left3);
+    };
+    auto B = [&]() {
+      paraMerge(arr,mid,right1,index,right2,left3+(index+mid-left1-left2)/2);
+    };
+    par_do(A, B);
+  }
+  else{
+    auto A = [&]() {
+      paraMerge(arr,left1,mid+1,left2,index,left3);
+    };
+    auto B = [&]() {
+      paraMerge(arr,mid+1,right1,index,right2,left3+(index+mid-left1-left2+1)/2);
+    };
+    par_do(A, B);
+  }
+  return;
+}
+
 int buildHeapLayer(data_type Freq, sequence<data_type> &NodeArray, sequence<int> &leftSeq, sequence<int> &rightSeq, int &progLeaf, int &progInter, int &interSize, bool flag){
   timer t_detail;
 	t_findindex.start();
@@ -86,27 +145,27 @@ int buildHeapLayer(data_type Freq, sequence<data_type> &NodeArray, sequence<int>
   if(flag)t_detail.next("Find Index:");
 
   t_merge.start();
-  auto mid = merge(NodeArray.cut(progLeaf,leafIndex),NodeArray.cut(ARRAYSIZE+progInter,interIndex),[&](int a, int     b){return a<b;});
-  if((leafIndex-progLeaf+interIndex-ARRAYSIZE-progInter)%2==0){
-    progLeaf=leafIndex;
-    progInter=interIndex-ARRAYSIZE;
-  }
-  else if(NodeArray[leafIndex-1]>NodeArray[interIndex-1]){
-    progLeaf=leafIndex-1;
-    progInter=interIndex-ARRAYSIZE;
-  }else{
-    progLeaf=leafIndex;
-    progInter=interIndex-1-ARRAYSIZE;
+  if((leafIndex-progLeaf+interIndex-ARRAYSIZE-progInter)%2==1){
+    if(NodeArray[leafIndex-1]>NodeArray[interIndex-1]){
+      leafIndex--;
+    }else{
+      interIndex--;  
+    }
   }
   
+  paraMerge(NodeArray,progLeaf,leafIndex,progInter+ARRAYSIZE,interIndex,interSize+ARRAYSIZE);
+  int addSize = (leafIndex+interIndex-ARRAYSIZE-progInter-progLeaf)/2;	 
+  progLeaf=leafIndex;
+  progInter=interIndex-ARRAYSIZE;
+  
   t_merge.stop();
-   
+  return addSize;
+
   if(flag)t_detail.next("Merge:");
 
   t_add.start();
+  auto mid = merge(NodeArray.cut(progLeaf,leafIndex),NodeArray.cut(ARRAYSIZE+progInter,interIndex),[&](int a, int     b){return a<b;});
   int startPoint = interSize+ARRAYSIZE;
-	int addSize = mid.size()/2;
-	
 	parallel_for(0, addSize, [&](int i){
 		NodeArray[startPoint+i]=mid[i<<1]+mid[i<<1|1];
 	}, GRANULARITY);
