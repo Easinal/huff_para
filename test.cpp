@@ -14,10 +14,11 @@
 #include "get_time.h"
 
 
-#define ARRAYSIZE 100000000
+#define ARRAYSIZE 1000000000
 #define MINFREQ 1
-#define MAXFREQ 100
+#define MAXFREQ 1000000
 #define GRANULARITY 1024
+#define b_size 10000
 //#define TEST
 
 using namespace std;
@@ -41,7 +42,7 @@ struct NODE{
 
 void printArray(sequence<data_type> &arr, int size, int start=0){
 	for(int i=start;i<start+size;++i){
-		cout<<arr[i]<<endl;
+		cout<<i<<": "<<arr[i]<<endl;
 	}
 	cout<<endl;
 }
@@ -49,7 +50,7 @@ void printArray(sequence<data_type> &arr, int size, int start=0){
 void initRandomArray(sequence<data_type> &arr, int size, data_type min, data_type max, int seed = 0){
 	//srand(seed);
 	parallel_for(0, size, [&](int i){
-		arr[i]=hash32(i+seed*size);
+		arr[i]=hash32(i+seed*size)%(MAXFREQ-MINFREQ)+MINFREQ;
     //arr[i]=MINFREQ+rand()%(MAXFREQ-MINFREQ);
 	});
 	sort_inplace(arr.cut(0,size));
@@ -162,6 +163,92 @@ bool accuracyTest(sequence<data_type> &NodeArray){
 	return false;
 }
 
+int findKthSmallest(sequence<data_type> &arr1, sequence<data_type> &arr2, sequence<data_type> &arr3, int left1, int right1, int left2, int right2, int left3=0){
+  int size1 = right1-left1;
+  int size2 = right2-left2;
+  int b_num = (size1+size2+b_size-1)/b_size;
+  int *up = new int[b_num+1];
+  int *down = new int[b_num+1];
+  up[0]=left1,down[0]=left2;
+  up[b_num]=right1,down[b_num]=right2;
+  for(int k=1;k<b_num;++k){
+  //parallel_for(1,b_num,[&](int k){  
+    int size = k*b_size;
+    int left = left1, right = right1;
+    
+    int mid=right+1, i, j;
+    while(left<=right){
+
+      i = (left+right)/2;
+      data_type v = ((i==right1)?numeric_limits<data_type>::max():arr1[i]);
+      j = lower_bound(arr2.begin()+left2,arr2.begin()+right2,v)-arr2.begin();
+      if((i+j-left1-left2)>=size){
+        mid = i;
+        right = i-1;
+      }else{
+        left = i+1;
+      }
+    }
+    up[k]=mid,down[k]=(size-(mid-left1))+left2;
+ }//);
+  //#ifdef TEST
+  /*
+  cout<<b_num<<endl;
+  for(int i=0;i<b_num+1;++i){
+   cout<<"i:"<<i<<" up[i]: "<<up[i]<<" "<<arr1[up[i]]<<" down[i]: "<<down[i]<<" "<<arr2[down[i]]<<endl;
+  }*/
+  //#endif
+  timer t_merge;
+  //for(int i=0;i<b_num;++i){
+  parallel_for(0,b_num,[&](int i){
+      int progress = i*b_size/2+left3;
+      int ending = min((i+1)*b_size/2+left3,left3+(size1+size2)/2);
+
+      int prog1 = up[i];
+      int prog2 = down[i];
+      int end1 = up[i+1];
+      int end2 = down[i+1];
+      //cout<<"prog1: "<<prog1<<"  prog2: "<<prog2<<endl;
+      //cout<<"end1 : "<<end1<<"  end2 : "<<end2<<endl;
+      while(progress!=ending){
+      int flag=0;
+      data_type k;
+      data_type mn = numeric_limits<data_type>::max();
+      if(prog1<end1-1){
+          k = arr1[prog1]+arr1[prog1+1];
+          if(mn>k){
+            mn=k;
+            flag=1;
+          }
+      }
+      if(prog1<end1&&prog2<end2){
+        k = arr1[prog1]+arr2[prog2];
+        if(mn>k){
+          mn=k;
+          flag=2;
+        }
+      }
+      if(prog2<end2-1){
+        k = arr2[prog2]+arr2[prog2+1];
+        if(mn>k){
+          mn=k;
+          flag=3;
+        }
+      }
+      arr3[progress++]=mn;
+      if(flag==1)prog1+=2;
+      if(flag==2){
+        prog1++;prog2++;
+      }
+      if(flag==3)prog2+=2;
+    }
+  });
+  t_merge.stop();
+  cout<<"MERGE TIME: "<<t_merge.get_total()<<endl;
+  return 0;
+}
+
+
 void paraMerge(sequence<data_type> &arr1, sequence<data_type> &arr2, sequence<data_type> &arr3, int left1, int right1, int left2, int right2, int left3, int dep=0){
   int addSize;
   if((right1+right2-left1-left2)%2==1){
@@ -249,26 +336,31 @@ int main(){
   sequence<data_type> leftSeq(ARRAYSIZE);
   sequence<data_type> rightSeq(ARRAYSIZE);
   printf("init\n");
-  initRandomArray(leftSeq,ARRAYSIZE,  MINFREQ,MAXFREQ,1);
-  initRandomArray(rightSeq,ARRAYSIZE,  MINFREQ,MAXFREQ,2);
-  //printArray(leftSeq,ARRAYSIZE);
-  //printArray(rightSeq,ARRAYSIZE);
+  int left1 = 0, right1 = ARRAYSIZE, left2 = 0, right2 = ARRAYSIZE;
+  initRandomArray(leftSeq,right1,  MINFREQ,MAXFREQ,1);
+  initRandomArray(rightSeq,right2,  MINFREQ,MAXFREQ,2);
+  //printArray(leftSeq,right1-left1,left1);
+  //printArray(rightSeq,right2-left2,left2);
   printf("start\n");
+  int size = right2+right1-left1-left2;
   
   auto mid = merge(leftSeq,rightSeq,[&](data_type a, data_type  b){return a<b;});
   int startPoint = ARRAYSIZE;
   parallel_for(0, ARRAYSIZE, [&](int i){
     NodeArray[startPoint+i]=mid[i<<1]+mid[i<<1|1];
   }, GRANULARITY);
-  // printArray(mid,2*ARRAYSIZE);
+  //printArray(mid,2*ARRAYSIZE);
 
+  
   for(int i=0;i<ROUND;++i){
     t_timer.reset();
     t_timer.start();
-    paraMerge(leftSeq,rightSeq,NodeArray,0,ARRAYSIZE,0,ARRAYSIZE,0);
+    //paraMerge(leftSeq,rightSeq,NodeArray,0,ARRAYSIZE,0,ARRAYSIZE,0);
+    findKthSmallest(leftSeq,rightSeq,NodeArray,left1,right1,left2,right2,0);
     t_timer.stop();
-    //printArray(NodeArray,2*ARRAYSIZE);
+    //printArray(NodeArray,size,0);
    }
+  cout<<"TIME:"<<t_timer.get_total()<<endl;
   for(int i=0;i<ARRAYSIZE;++i){
     if(NodeArray[i]!=NodeArray[ARRAYSIZE+i]){
       cout<<"FALSE"<<endl;
@@ -276,5 +368,5 @@ int main(){
     }
   }
   cout<<"TRUE"<<endl;
- return 0;
+  return 0;
 }
