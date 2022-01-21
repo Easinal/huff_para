@@ -178,11 +178,12 @@ size_t buildHeapLayer(data_type Freq, sequence<data_type> &NodeArray, sequence<s
   return addSize;
 }
 
-bool accuracyTest(sequence<data_type> &NodeArray){
+bool accuracyTest(sequence<data_type> &NodeArray, timer & t_seq){
 	data_type ans = 0;
   size_t progInter=0, progLeaf=0;
   size_t interSize=0;
   vector<data_type> SeqArray(ARRAYSIZE-1);
+  t_seq.start();
   while(progInter!=ARRAYSIZE-2){
     int flag=0;
     data_type k;
@@ -216,6 +217,7 @@ bool accuracyTest(sequence<data_type> &NodeArray){
     }
     if(flag==3)progInter+=2;
   }
+  t_seq.stop();
  	if(ans==total)return true;
 	 
   for(size_t i=0;i<ARRAYSIZE;++i){
@@ -276,9 +278,9 @@ int main(){
   }
 
   total = reduce(NodeArray.cut(ARRAYSIZE,2*ARRAYSIZE-1));
-  t_seq.start();
-  bool result=accuracyTest(NodeArray);
-  t_seq.stop();
+  
+  bool result=accuracyTest(NodeArray,t_seq);
+  
   if(!result){
     cout<<"WRONG ANSWER"<<endl;
     return 0;
