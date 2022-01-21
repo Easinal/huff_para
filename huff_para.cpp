@@ -19,7 +19,7 @@ constexpr size_t ARRAYSIZE = 1e9+10;
 constexpr data_type MINFREQ = 1;
 constexpr data_type MAXFREQ = 100000;
 constexpr size_t GRANULARITY = 1024;
-constexpr int b_size = 10000;
+constexpr size_t b_size = 10000;
  
 //#define TEST
 
@@ -34,40 +34,40 @@ timer t_merge;
 timer t_bisearch;
 
 struct NODE{
-  int index;
+  size_t index;
   data_type value;
 
 };
 
-void printArray(sequence<data_type> &arr, int size, int start=0){
-	for(int i=start;i<start+size;++i){
+void printArray(sequence<data_type> &arr, size_t size, size_t start=0){
+	for(size_t i=start;i<start+size;++i){
 		cout<<arr[i]<<endl;
 	}
 	cout<<endl;
 }
 
-void initRandomArray(sequence<data_type> &arr, int size, data_type min, data_type max, int seed){
+void initRandomArray(sequence<data_type> &arr, size_t size, data_type min, data_type max, size_t seed){
 	//srand(seed);
-	parallel_for(0, size, [&](int i){
+	parallel_for(0, size, [&](size_t i){
 		arr[i]=min+hash32(i+seed*ARRAYSIZE)%(max-min);
 	});
 	sort_inplace(arr.cut(0,size));
 }
 
-data_type findMinHeap(sequence<data_type> &NodeArray, int &progLeaf, int &progInter, int &interSize){
+data_type findMinHeap(sequence<data_type> &NodeArray, size_t &progLeaf, size_t &progInter, size_t &interSize){
   t_minheap.start();
-	int midSize=0;
+	size_t midSize=0;
 	data_type fa[4];
 	if(progLeaf<ARRAYSIZE){
 		fa[midSize++]=NodeArray[progLeaf];
 	}
-	if(progLeaf<ARRAYSIZE-1){
+	if(progLeaf+1<ARRAYSIZE){
 		fa[midSize++]=NodeArray[progLeaf+1];
 	}
 	if(progInter<interSize){
 		fa[midSize++]=NodeArray[ARRAYSIZE+progInter];
 	}
-	if(progInter<interSize-1){
+	if(progInter+1<interSize){
 		fa[midSize++]=NodeArray[ARRAYSIZE+progInter+1];
 	}
 	sort(fa,fa+midSize);
@@ -76,20 +76,20 @@ data_type findMinHeap(sequence<data_type> &NodeArray, int &progLeaf, int &progIn
 	return minFreq;
 }
 
-void paraMerge(sequence<data_type> &arr, int left1, int right1, int left2, int right2, int left3){
-  int size1 = right1-left1;
-  int size2 = right2-left2;
-  int b_num = (size1+size2+b_size-1)/b_size;
-  int *up = new int[b_num+1];
-  int *down = new int[b_num+1];
+void paraMerge(sequence<data_type> &arr, size_t left1, size_t right1, size_t left2, size_t right2, size_t left3){
+  size_t size1 = right1-left1;
+  size_t size2 = right2-left2;
+  size_t b_num = (size1+size2+b_size-1)/b_size;
+  size_t *up = new size_t[b_num+1];
+  size_t *down = new size_t[b_num+1];
   up[0]=left1,down[0]=left2;
   up[b_num]=right1,down[b_num]=right2;
   t_bisearch.start();
-  parallel_for(1,b_num,[&](int k){
-    int size = k*b_size;
-    int left = left1, right = min(right1,left1+size);
+  parallel_for(1,b_num,[&](size_t k){
+    size_t size = k*b_size;
+    size_t left = left1, right = min(right1,left1+size);
 
-    int mid=left, i, j;
+    size_t mid=left, i, j;
     while(left<=right){
 
       i = (left+right)/2;
@@ -106,18 +106,18 @@ void paraMerge(sequence<data_type> &arr, int left1, int right1, int left2, int r
   });
   t_bisearch.stop();
   t_merge.start();
-  parallel_for(0,b_num,[&](int i){
-      int progress = i*b_size/2+left3;
-      int ending = min((i+1)*b_size/2+left3,left3+(size1+size2)/2);
-      int prog1 = up[i];
-      int prog2 = down[i];
-      int end1 = up[i+1];
-      int end2 = down[i+1];
+  parallel_for(0,b_num,[&](size_t i){
+      size_t progress = i*b_size/2+left3;
+      size_t ending = min((i+1)*b_size/2+left3,left3+(size1+size2)/2);
+      size_t prog1 = up[i];
+      size_t prog2 = down[i];
+      size_t end1 = up[i+1];
+      size_t end2 = down[i+1];
       while(progress!=ending){
-      int flag=0;
+      size_t flag=0;
       data_type k;
       data_type mn = numeric_limits<data_type>::max();
-      if(prog1<end1-1){
+      if(prog1+1<end1){
           k = arr[prog1]+arr[prog1+1];
           if(mn>k){
             mn=k;
@@ -131,7 +131,7 @@ void paraMerge(sequence<data_type> &arr, int left1, int right1, int left2, int r
           flag=2;
         }
       }
-      if(prog2<end2-1){
+      if(prog2+1<end2){
         k = arr[prog2]+arr[prog2+1];
         if(mn>k){
           mn=k;
@@ -153,11 +153,11 @@ void paraMerge(sequence<data_type> &arr, int left1, int right1, int left2, int r
   return;
 }
 
-int buildHeapLayer(data_type Freq, sequence<data_type> &NodeArray, sequence<int> &leftSeq, sequence<int> &rightSeq, int &progLeaf, int &progInter, int &interSize, bool flag){
+size_t buildHeapLayer(data_type Freq, sequence<data_type> &NodeArray, sequence<size_t> &leftSeq, sequence<size_t> &rightSeq, size_t &progLeaf, size_t &progInter, size_t &interSize, bool flag){
   timer t_detail;
 	t_findindex.start();
-	int leafIndex = lower_bound(NodeArray.begin()+progLeaf,NodeArray.begin()+ARRAYSIZE,Freq+1)-NodeArray.begin();
-	int interIndex = lower_bound(NodeArray.begin()+ARRAYSIZE+progInter,NodeArray.begin()+ARRAYSIZE+interSize,Freq+1)-NodeArray.begin();
+	size_t leafIndex = lower_bound(NodeArray.begin()+progLeaf,NodeArray.begin()+ARRAYSIZE,Freq+1)-NodeArray.begin();
+	size_t interIndex = lower_bound(NodeArray.begin()+ARRAYSIZE+progInter,NodeArray.begin()+ARRAYSIZE+interSize,Freq+1)-NodeArray.begin();
   t_findindex.stop();
   
   if(flag)t_detail.next("Find Index:");
@@ -171,7 +171,7 @@ int buildHeapLayer(data_type Freq, sequence<data_type> &NodeArray, sequence<int>
   }
   t_findindex.stop();
   paraMerge(NodeArray,progLeaf,leafIndex,progInter+ARRAYSIZE,interIndex,interSize+ARRAYSIZE);
-  int addSize = (leafIndex+interIndex-ARRAYSIZE-progInter-progLeaf)/2;	 
+  size_t addSize = (leafIndex+interIndex-ARRAYSIZE-progInter-progLeaf)/2;	 
   progLeaf=leafIndex;
   progInter=interIndex-ARRAYSIZE;
   interSize+=addSize;
@@ -180,14 +180,14 @@ int buildHeapLayer(data_type Freq, sequence<data_type> &NodeArray, sequence<int>
 
 bool accuracyTest(sequence<data_type> &NodeArray){
 	data_type ans = 0;
-  int progInter=0, progLeaf=0;
-  int interSize=0;
+  size_t progInter=0, progLeaf=0;
+  size_t interSize=0;
   vector<data_type> SeqArray(ARRAYSIZE-1);
   while(progInter!=ARRAYSIZE-2){
     int flag=0;
     data_type k;
     data_type mn = numeric_limits<data_type>::max();
-    if(progLeaf<ARRAYSIZE-1){
+    if(progLeaf+1<ARRAYSIZE){
         k = NodeArray[progLeaf]+NodeArray[progLeaf+1];
         if(mn>k){
           mn=k;
@@ -201,7 +201,7 @@ bool accuracyTest(sequence<data_type> &NodeArray){
         flag=2;
       }
     }
-    if(progInter<interSize-1){
+    if(progInter+1<interSize){
       k = SeqArray[progInter]+SeqArray[progInter+1];
       if(mn>k){
         mn=k;
@@ -218,9 +218,9 @@ bool accuracyTest(sequence<data_type> &NodeArray){
   }
  	if(ans==total)return true;
 	 
-  for(int i=0;i<ARRAYSIZE;++i){
+  for(size_t i=0;i<ARRAYSIZE;++i){
     if(NodeArray[i+ARRAYSIZE]!=SeqArray[i]){
-      for(int j=i-5;j<i+5;++j){
+      for(size_t j=i-5;j<i+5;++j){
         cout<<"j= "<<j<<" Actual Answer: "<<NodeArray[j+ARRAYSIZE]<<" True Answer: "<<SeqArray[j]<<endl;
       }
       cout<<"i= "<<i<<" Actual Answer: "<<NodeArray[i+ARRAYSIZE]<<" True Answer: "<<SeqArray[i]<<endl;
@@ -231,16 +231,16 @@ bool accuracyTest(sequence<data_type> &NodeArray){
   return false;
 }
 
-int runParallel(sequence<data_type> &NodeArray, sequence<int> &leftSeq, sequence<int> &rightSeq, timer &t, bool printDetail = false){
-  int progLeaf = 0, progInter = 0;
-  int interSize = 0;
-  int layer = 0;
+size_t runParallel(sequence<data_type> &NodeArray, sequence<size_t> &leftSeq, sequence<size_t> &rightSeq, timer &t, bool printDetail = false){
+  size_t progLeaf = 0, progInter = 0;
+  size_t interSize = 0;
+  size_t layer = 0;
   timer t_timer;
   t.start();
   while(progInter!=ARRAYSIZE-2){
     bool flag = false;
     data_type minFreq = findMinHeap(NodeArray, progLeaf, progInter, interSize);  
-    int addSize = buildHeapLayer(minFreq, NodeArray, leftSeq, rightSeq, progLeaf, progInter, interSize, flag);
+    size_t addSize = buildHeapLayer(minFreq, NodeArray, leftSeq, rightSeq, progLeaf, progInter, interSize, flag);
     layer++;
     if(printDetail){
       t_timer.next("Round "+to_string(layer)+"--AddSize "+to_string(addSize));
@@ -253,8 +253,8 @@ int runParallel(sequence<data_type> &NodeArray, sequence<int> &leftSeq, sequence
 int main(){
   int ROUND = 5;
   sequence<data_type> NodeArray(2*ARRAYSIZE-1);
-  sequence<int> leftSeq(ARRAYSIZE);
-  sequence<int> rightSeq(ARRAYSIZE);
+  sequence<size_t> leftSeq(ARRAYSIZE);
+  sequence<size_t> rightSeq(ARRAYSIZE);
   printf("init\n");
   initRandomArray(NodeArray,ARRAYSIZE,MINFREQ,MAXFREQ,0);
   //printArray(NodeArray,ARRAYSIZE);
