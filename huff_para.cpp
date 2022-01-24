@@ -46,29 +46,65 @@ void printArray(sequence<data_type> &arr, size_t size, size_t start=0){
 	cout<<endl;
 }
 
-void initRandomArray(sequence<data_type> &arr, size_t size, data_type min, data_type max, size_t seed){
+void exponential_distribution(sequence<data_type> &arr, size_t &size, data_type min, data_type max, double lamda) {
+  constexpr int MAX = 10;
+  sequence<long long> nums(MAX+1);
+  for(int i = 0; i < MAX; i++) {
+    nums[i] = ceil(size*lamda*exp(-lamda*i))/1.5;
+  }
+  nums[MAX] = 0;
+  size = scan_inplace(nums);
+  arr = sequence<data_type>(2*size);
+  parallel_for(0,MAX,[&](size_t i) {
+    parallel_for(nums[i],nums[i+1],[&](size_t j) {
+      arr[j] = hash32(i)%(max-min)+min;
+    });
+  });
+  sort_inplace(arr.cut(0,size));
+}
+
+void initRandomArray(sequence<data_type> &arr, size_t &size, data_type min, data_type max, size_t seed){
 	//srand(seed);
+  arr.resize(2*size);
 	parallel_for(0, size, [&](size_t i){
 		arr[i]=min+hash32(i+seed*ARRAYSIZE)%(max-min);
 	});
 	sort_inplace(arr.cut(0,size));
 }
+void zipfian_distribution(sequence<data_type> &arr, size_t &size, data_type min, data_type max){
+  size = size/log(size);
+  size_t MAX = 1e7;
+  sequence<long long> nums(MAX+1);
+  for(size_t i = 0; i < MAX; i++) {
+    nums[i] = ceil(size/(i+1))/2.5;
+  }
+  nums[MAX] = 0;
+  size = scan_inplace(nums);
+  arr = sequence<data_type>(2*size);
+  
+  parallel_for(0,MAX,[&](size_t i) {
+    parallel_for(nums[i],nums[i+1],[&](size_t j) {
+      arr[j] = hash32(i)%(max-min)+min;
+    });
+  });
+ sort_inplace(arr.cut(0,size));
+}
 
-data_type findMinHeap(sequence<data_type> &NodeArray, size_t &progLeaf, size_t &progInter, size_t &interSize){
+data_type findMinHeap(sequence<data_type> &NodeArray, size_t size, size_t &progLeaf, size_t &progInter, size_t &interSize){
   t_minheap.start();
 	size_t midSize=0;
 	data_type fa[4];
-	if(progLeaf<ARRAYSIZE){
+	if(progLeaf<size){
 		fa[midSize++]=NodeArray[progLeaf];
 	}
-	if(progLeaf+1<ARRAYSIZE){
+	if(progLeaf+1<size){
 		fa[midSize++]=NodeArray[progLeaf+1];
 	}
 	if(progInter<interSize){
-		fa[midSize++]=NodeArray[ARRAYSIZE+progInter];
+		fa[midSize++]=NodeArray[size+progInter];
 	}
 	if(progInter+1<interSize){
-		fa[midSize++]=NodeArray[ARRAYSIZE+progInter+1];
+		fa[midSize++]=NodeArray[size+progInter+1];
 	}
 	sort(fa,fa+midSize);
 	data_type minFreq = fa[0]+fa[1];	
@@ -153,49 +189,49 @@ void paraMerge(sequence<data_type> &arr, size_t left1, size_t right1, size_t lef
   return;
 }
 
-size_t buildHeapLayer(data_type Freq, sequence<data_type> &NodeArray, sequence<size_t> &leftSeq, sequence<size_t> &rightSeq, size_t &progLeaf, size_t &progInter, size_t &interSize, bool flag){
+size_t buildHeapLayer(data_type Freq, sequence<data_type> &NodeArray, sequence<size_t> &leftSeq, sequence<size_t> &rightSeq, size_t size, size_t &progLeaf, size_t &progInter, size_t &interSize, bool flag){
   timer t_detail;
 	t_findindex.start();
-	size_t leafIndex = lower_bound(NodeArray.begin()+progLeaf,NodeArray.begin()+ARRAYSIZE,Freq+1)-NodeArray.begin();
-	size_t interIndex = lower_bound(NodeArray.begin()+ARRAYSIZE+progInter,NodeArray.begin()+ARRAYSIZE+interSize,Freq+1)-NodeArray.begin();
+	size_t leafIndex = lower_bound(NodeArray.begin()+progLeaf,NodeArray.begin()+size,Freq+1)-NodeArray.begin();
+	size_t interIndex = lower_bound(NodeArray.begin()+size+progInter,NodeArray.begin()+size+interSize,Freq+1)-NodeArray.begin();
   t_findindex.stop();
   
   if(flag)t_detail.next("Find Index:");
 
-  if((leafIndex-progLeaf+interIndex-ARRAYSIZE-progInter)%2==1){
-    if(interIndex==progInter+ARRAYSIZE||NodeArray[leafIndex-1]>NodeArray[interIndex-1]){
+  if((leafIndex-progLeaf+interIndex-size-progInter)%2==1){
+    if(interIndex==progInter+size||NodeArray[leafIndex-1]>NodeArray[interIndex-1]){
       leafIndex--;
     }else{
       interIndex--;  
     }
   }
   t_findindex.stop();
-  paraMerge(NodeArray,progLeaf,leafIndex,progInter+ARRAYSIZE,interIndex,interSize+ARRAYSIZE);
-  size_t addSize = (leafIndex+interIndex-ARRAYSIZE-progInter-progLeaf)/2;	 
+  paraMerge(NodeArray,progLeaf,leafIndex,progInter+size,interIndex,interSize+size);
+  size_t addSize = (leafIndex+interIndex-size-progInter-progLeaf)/2;	 
   progLeaf=leafIndex;
-  progInter=interIndex-ARRAYSIZE;
+  progInter=interIndex-size;
   interSize+=addSize;
   return addSize;
 }
 
-bool accuracyTest(sequence<data_type> &NodeArray, timer & t_seq){
+bool accuracyTest(sequence<data_type> &NodeArray, size_t size, timer & t_seq){
 	data_type ans = 0;
   size_t progInter=0, progLeaf=0;
   size_t interSize=0;
-  vector<data_type> SeqArray(ARRAYSIZE-1);
+  vector<data_type> SeqArray(size-1);
   t_seq.start();
-  while(progInter!=ARRAYSIZE-2){
+  while(progInter!=size-2){
     int flag=0;
     data_type k;
     data_type mn = numeric_limits<data_type>::max();
-    if(progLeaf+1<ARRAYSIZE){
+    if(progLeaf+1<size){
         k = NodeArray[progLeaf]+NodeArray[progLeaf+1];
         if(mn>k){
           mn=k;
           flag=1;
         }
     }
-    if(progLeaf<ARRAYSIZE&&progInter<interSize){
+    if(progLeaf<size&&progInter<interSize){
       k = NodeArray[progLeaf]+SeqArray[progInter];
       if(mn>k){
         mn=k;
@@ -220,12 +256,12 @@ bool accuracyTest(sequence<data_type> &NodeArray, timer & t_seq){
   t_seq.stop();
  	if(ans==total)return true;
 	 
-  for(size_t i=0;i<ARRAYSIZE;++i){
-    if(NodeArray[i+ARRAYSIZE]!=SeqArray[i]){
+  for(size_t i=0;i<size;++i){
+    if(NodeArray[i+size]!=SeqArray[i]){
       for(size_t j=i-5;j<i+5;++j){
-        cout<<"j= "<<j<<" Actual Answer: "<<NodeArray[j+ARRAYSIZE]<<" True Answer: "<<SeqArray[j]<<endl;
+        cout<<"j= "<<j<<" Actual Answer: "<<NodeArray[j+size]<<" True Answer: "<<SeqArray[j]<<endl;
       }
-      cout<<"i= "<<i<<" Actual Answer: "<<NodeArray[i+ARRAYSIZE]<<" True Answer: "<<SeqArray[i]<<endl;
+      cout<<"i= "<<i<<" Actual Answer: "<<NodeArray[i+size]<<" True Answer: "<<SeqArray[i]<<endl;
       return false;
     }
   }
@@ -233,16 +269,16 @@ bool accuracyTest(sequence<data_type> &NodeArray, timer & t_seq){
   return false;
 }
 
-size_t runParallel(sequence<data_type> &NodeArray, sequence<size_t> &leftSeq, sequence<size_t> &rightSeq, timer &t, bool printDetail = false){
+size_t runParallel(sequence<data_type> &NodeArray, sequence<size_t> &leftSeq, sequence<size_t> &rightSeq, size_t size, timer &t, bool printDetail = false){
   size_t progLeaf = 0, progInter = 0;
   size_t interSize = 0;
   size_t layer = 0;
   timer t_timer;
   t.start();
-  while(progInter!=ARRAYSIZE-2){
+  while(progInter!=size-2){
     bool flag = false;
-    data_type minFreq = findMinHeap(NodeArray, progLeaf, progInter, interSize);  
-    size_t addSize = buildHeapLayer(minFreq, NodeArray, leftSeq, rightSeq, progLeaf, progInter, interSize, flag);
+    data_type minFreq = findMinHeap(NodeArray, size, progLeaf, progInter, interSize);  
+    size_t addSize = buildHeapLayer(minFreq, NodeArray, leftSeq, rightSeq, size, progLeaf, progInter, interSize, flag);
     layer++;
     if(printDetail){
       t_timer.next("Round "+to_string(layer)+"--AddSize "+to_string(addSize));
@@ -252,19 +288,31 @@ size_t runParallel(sequence<data_type> &NodeArray, sequence<size_t> &leftSeq, se
   return 0;
 }
 
-int main(){
-  int ROUND = 5;
-  sequence<data_type> NodeArray(2*ARRAYSIZE-1);
-  sequence<size_t> leftSeq(ARRAYSIZE);
-  sequence<size_t> rightSeq(ARRAYSIZE);
+int run_final(int ROUND, int type, size_t size){
+  sequence<data_type> NodeArray;
+  sequence<size_t> leftSeq;
+  sequence<size_t> rightSeq;
   printf("init\n");
-  initRandomArray(NodeArray,ARRAYSIZE,MINFREQ,MAXFREQ,0);
+  if(type==0){
+    cout<<endl<<"Uniform: size = "<<size<<endl;
+    initRandomArray(NodeArray,size,MINFREQ,MAXFREQ,0);
+  }
+  if(type==1){
+    exponential_distribution(NodeArray, size, MINFREQ, MAXFREQ, 1);
+    cout<<endl<<"Exponential: size = "<<size<<endl;
+  }
+  if(type==2){
+     zipfian_distribution(NodeArray, size, MINFREQ, MAXFREQ);
+     cout<<endl<<"Zipfian:size = "<<size<<endl;
+  }
+  leftSeq.resize(size);
+  rightSeq.resize(size);
   //printArray(NodeArray,ARRAYSIZE);
   printf("start\n");
   timer t;
 
 
-  runParallel(NodeArray, leftSeq, rightSeq,t,true);
+  runParallel(NodeArray, leftSeq, rightSeq, size, t,true);
   t_minheap.reset();
   t_findindex.reset();
   t_merge.reset();
@@ -272,20 +320,20 @@ int main(){
   t.reset();
   timer t_seq;
   t_seq.reset();
-  
+
   for(int i=0;i<ROUND;++i){
-    runParallel(NodeArray,leftSeq, rightSeq,t); 
+    runParallel(NodeArray,leftSeq, rightSeq, size, t);
   }
 
-  total = reduce(NodeArray.cut(ARRAYSIZE,2*ARRAYSIZE-1));
-  
-  bool result=accuracyTest(NodeArray,t_seq);
-  
+  total = reduce(NodeArray.cut(size,2*size-1));
+
+  bool result=accuracyTest(NodeArray,size,t_seq);
+
   if(!result){
     cout<<"WRONG ANSWER"<<endl;
     return 0;
   }
- 
+
   cout<<"total:"<<total/ROUND<<endl;
   cout<<"Find min heap time: "<<t_minheap.get_total()/ROUND<<endl;
   cout<<"Find index time: "<<t_findindex.get_total()/ROUND<<endl;
@@ -294,6 +342,17 @@ int main(){
   cout<<"parallel time: "<<t.get_total()/ROUND<<endl;
 
   cout<<"sequential time: "<<t_seq.get_total()<<endl;
+  return 0;
+}
 
-	return 0;
+int main(){
+  int ROUND = 5;
+  vector<size_t> uniform_size{1000,3000,10000,30000,100000,300000,1000000,3000000,10000000,30000000,100000000,300000000,1000000000,3000000000};
+  for(int j=0;j<3;++j){
+    for(size_t i=0;i<uniform_size.size();++i){
+      run_final(ROUND, j,uniform_size[i]);
+    }
+  }
+  
+  return 0;
 }
