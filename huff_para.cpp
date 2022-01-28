@@ -47,11 +47,18 @@ void printArray(sequence<data_type> &arr, size_t size, size_t start=0){
 }
 
 void exponential_distribution(sequence<data_type> &arr, size_t &size, data_type min, data_type max, double lamda) {
-  constexpr int MAX = 10;
+  constexpr int MAX = 10000;
+  sequence<double> tmp(MAX+1);
   sequence<long long> nums(MAX+1);
+
+  double sum = 0;
   for(int i = 0; i < MAX; i++) {
-    nums[i] = ceil(size*lamda*exp(-lamda*i))/1.5;
+    tmp[i] = lamda*exp(-lamda*i);
+    sum+=tmp[i];
   }
+  parallel_for(0,MAX,[&](size_t i){
+    nums[i] = round(tmp[i]/sum*size);
+  });
   nums[MAX] = 0;
   size = scan_inplace(nums);
   arr = sequence<data_type>(2*size);
@@ -72,16 +79,21 @@ void initRandomArray(sequence<data_type> &arr, size_t &size, data_type min, data
 	sort_inplace(arr.cut(0,size));
 }
 void zipfian_distribution(sequence<data_type> &arr, size_t &size, data_type min, data_type max){
-  size = size/log(size);
-  size_t MAX = 1e7;
+  size_t MAX = 10000;
+  sequence<double> tmp(MAX+1);
   sequence<long long> nums(MAX+1);
+  double sum = 0;
   for(size_t i = 0; i < MAX; i++) {
-    nums[i] = ceil(size/(i+1))/2.5;
+    tmp[i] = 1.0/(i+1);
+    sum+=tmp[i];
   }
+  parallel_for(0,MAX,[&](size_t i){
+    nums[i] = round(tmp[i]/sum*size);
+  });
   nums[MAX] = 0;
   size = scan_inplace(nums);
   arr = sequence<data_type>(2*size);
-  
+
   parallel_for(0,MAX,[&](size_t i) {
     parallel_for(nums[i],nums[i+1],[&](size_t j) {
       arr[j] = hash32(i)%(max-min)+min;
@@ -288,22 +300,22 @@ size_t runParallel(sequence<data_type> &NodeArray, sequence<size_t> &leftSeq, se
   return 0;
 }
 
-int run_final(int ROUND, int type, size_t size){
+int run_final(int ROUND, int type, size_t max_freq, size_t size){
   sequence<data_type> NodeArray;
   sequence<size_t> leftSeq;
   sequence<size_t> rightSeq;
   printf("init\n");
   if(type==0){
-    cout<<endl<<"Uniform: size = "<<size<<endl;
-    initRandomArray(NodeArray,size,MINFREQ,MAXFREQ,0);
+    cout<<endl<<"Uniform: size = "<<size<<" max freq = "<<max_freq<<endl;
+    initRandomArray(NodeArray,size,MINFREQ,max_freq,0);
   }
   if(type==1){
-    exponential_distribution(NodeArray, size, MINFREQ, MAXFREQ, 1);
-    cout<<endl<<"Exponential: size = "<<size<<endl;
+    exponential_distribution(NodeArray, size, MINFREQ, max_freq, 1);
+    cout<<endl<<"Exponential: size = "<<size<<" max freq = "<<max_freq<<endl;
   }
   if(type==2){
-     zipfian_distribution(NodeArray, size, MINFREQ, MAXFREQ);
-     cout<<endl<<"Zipfian:size = "<<size<<endl;
+     zipfian_distribution(NodeArray, size, MINFREQ, max_freq);
+     cout<<endl<<"Zipfian:size = "<<size<<" max freq = "<<max_freq<<endl;
   }
   leftSeq.resize(size);
   rightSeq.resize(size);
@@ -347,12 +359,16 @@ int run_final(int ROUND, int type, size_t size){
 
 int main(){
   int ROUND = 5;
-  vector<size_t> uniform_size{1000,3000,10000,30000,100000,300000,1000000,3000000,10000000,30000000,100000000,300000000,1000000000,3000000000};
+ 
+  vector<size_t> uniform_size{100000,300000,1000000,3000000,10000000,30000000,100000000,300000000,1000000000,3000000000};
+  vector<size_t> freq_maximum{10,100,1000,10000,100000,1000000};
   for(int j=0;j<3;++j){
     for(size_t i=0;i<uniform_size.size();++i){
-      run_final(ROUND, j,uniform_size[i]);
+      for(size_t k=0;k<freq_maximum.size();++k){
+        run_final(ROUND, j,k,uniform_size[i]);
+      }
     }
   }
-  
+  //run_final(ROUND, 2, uniform_size[0]); 
   return 0;
 }
