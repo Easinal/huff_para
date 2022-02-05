@@ -13,7 +13,7 @@
 #include <parlay/utilities.h>
 #include "get_time.h"
 
-using data_type = long;
+using data_type = unsigned long long;
 
 constexpr size_t ARRAYSIZE = 1e9+10;
 constexpr data_type MINFREQ = 1;
@@ -46,11 +46,15 @@ void printArray(sequence<data_type> &arr, size_t size, size_t start=0){
 	cout<<endl;
 }
 
-void exponential_distribution(sequence<data_type> &arr, size_t &size, data_type min, data_type max, double lamda) {
-  constexpr int MAX = 10000;
-  sequence<double> tmp(MAX+1);
-  sequence<long long> nums(MAX+1);
-
+void exponential_distribution(sequence<data_type> &arr, size_t &size, double lamda) {
+  //constexpr int MAX = 10000;
+  //sequence<double> tmp(MAX+1);
+  //sequence<long long> nums(MAX+1);
+  
+  parallel_for(0,size,[&](size_t i) {
+    arr[i] = 10 * exp(-i*1.0/size);
+  });
+  /*
   double sum = 0;
   for(int i = 0; i < MAX; i++) {
     tmp[i] = lamda*exp(-lamda*i);
@@ -64,21 +68,28 @@ void exponential_distribution(sequence<data_type> &arr, size_t &size, data_type 
   arr = sequence<data_type>(2*size);
   parallel_for(0,MAX,[&](size_t i) {
     parallel_for(nums[i],nums[i+1],[&](size_t j) {
-      arr[j] = hash32(i)%(max-min)+min;
+      arr[j] = i+1;
     });
   });
+  */
   sort_inplace(arr.cut(0,size));
 }
 
 void initRandomArray(sequence<data_type> &arr, size_t &size, data_type min, data_type max, size_t seed){
 	//srand(seed);
   arr.resize(2*size);
-	parallel_for(0, size, [&](size_t i){
-		arr[i]=min+hash32(i+seed*ARRAYSIZE)%(max-min);
+	if(max==min){
+    parallel_for(0,size,[&](size_t i){
+      arr[i]=min;
+    });
+    return;
+  }
+  parallel_for(0, size, [&](size_t i){
+		arr[i]=min+hash64(i+seed*ARRAYSIZE)%(max-min);
 	});
 	sort_inplace(arr.cut(0,size));
 }
-void zipfian_distribution(sequence<data_type> &arr, size_t &size, data_type min, data_type max){
+void zipfian_distribution(sequence<data_type> &arr, size_t &size){
   size_t MAX = 10000;
   sequence<double> tmp(MAX+1);
   sequence<long long> nums(MAX+1);
@@ -96,7 +107,7 @@ void zipfian_distribution(sequence<data_type> &arr, size_t &size, data_type min,
 
   parallel_for(0,MAX,[&](size_t i) {
     parallel_for(nums[i],nums[i+1],[&](size_t j) {
-      arr[j] = hash32(i)%(max-min)+min;
+      arr[j] = i+1;
     });
   });
  sort_inplace(arr.cut(0,size));
@@ -119,6 +130,7 @@ data_type findMinHeap(sequence<data_type> &NodeArray, size_t size, size_t &progL
 		fa[midSize++]=NodeArray[size+progInter+1];
 	}
 	sort(fa,fa+midSize);
+  assert(fa[0] < ULLONG_MAX-fa[1]);
 	data_type minFreq = fa[0]+fa[1];	
   t_minheap.stop();
 	return minFreq;
@@ -166,6 +178,7 @@ void paraMerge(sequence<data_type> &arr, size_t left1, size_t right1, size_t lef
       data_type k;
       data_type mn = numeric_limits<data_type>::max();
       if(prog1+1<end1){
+          assert(arr[prog1]<ULLONG_MAX-arr[prog1+1]);
           k = arr[prog1]+arr[prog1+1];
           if(mn>k){
             mn=k;
@@ -173,6 +186,7 @@ void paraMerge(sequence<data_type> &arr, size_t left1, size_t right1, size_t lef
           }
       }
       if(prog1<end1&&prog2<end2){
+        assert(arr[prog1]<ULLONG_MAX-arr[prog2]);
         k = arr[prog1]+arr[prog2];
         if(mn>k){
           mn=k;
@@ -180,6 +194,7 @@ void paraMerge(sequence<data_type> &arr, size_t left1, size_t right1, size_t lef
         }
       }
       if(prog2+1<end2){
+        assert(arr[prog2]<ULLONG_MAX-arr[prog2+1]);
         k = arr[prog2]+arr[prog2+1];
         if(mn>k){
           mn=k;
@@ -237,6 +252,7 @@ bool accuracyTest(sequence<data_type> &NodeArray, size_t size, timer & t_seq){
     data_type k;
     data_type mn = numeric_limits<data_type>::max();
     if(progLeaf+1<size){
+        assert(NodeArray[progLeaf]<ULLONG_MAX-NodeArray[progLeaf+1]);
         k = NodeArray[progLeaf]+NodeArray[progLeaf+1];
         if(mn>k){
           mn=k;
@@ -244,18 +260,20 @@ bool accuracyTest(sequence<data_type> &NodeArray, size_t size, timer & t_seq){
         }
     }
     if(progLeaf<size&&progInter<interSize){
-      k = NodeArray[progLeaf]+SeqArray[progInter];
-      if(mn>k){
-        mn=k;
-        flag=2;
-      }
+        assert(NodeArray[progLeaf]<ULLONG_MAX-SeqArray[progInter]);
+        k = NodeArray[progLeaf]+SeqArray[progInter];
+        if(mn>k){
+          mn=k;
+          flag=2;
+        }
     }
     if(progInter+1<interSize){
-      k = SeqArray[progInter]+SeqArray[progInter+1];
-      if(mn>k){
-        mn=k;
-        flag=3;
-      }
+        assert(SeqArray[progInter]<ULLONG_MAX-SeqArray[progInter+1]);
+        k = SeqArray[progInter]+SeqArray[progInter+1];
+        if(mn>k){
+          mn=k;
+          flag=3;
+        }
     }
     SeqArray[interSize++]=mn;
     ans+=mn;
@@ -297,34 +315,34 @@ size_t runParallel(sequence<data_type> &NodeArray, sequence<size_t> &leftSeq, se
     }
   }
   t.stop();
-  return 0;
+  return layer;
 }
 
-int run_final(int ROUND, int type, size_t max_freq, size_t size){
+int run_final(int ROUND, int type, size_t max_freq, size_t size, double lambda=0.001){
   sequence<data_type> NodeArray;
   sequence<size_t> leftSeq;
   sequence<size_t> rightSeq;
-  printf("init\n");
+  //printf("init\n");
   if(type==0){
     cout<<endl<<"Uniform: size = "<<size<<" max freq = "<<max_freq<<endl;
     initRandomArray(NodeArray,size,MINFREQ,max_freq,0);
   }
   if(type==1){
-    exponential_distribution(NodeArray, size, MINFREQ, max_freq, 1);
-    cout<<endl<<"Exponential: size = "<<size<<" max freq = "<<max_freq<<endl;
+    exponential_distribution(NodeArray, size, lambda);
+    cout<<endl<<"Exponential: size = "<<size<<" lambda = "<<lambda<<endl;
   }
   if(type==2){
-     zipfian_distribution(NodeArray, size, MINFREQ, max_freq);
-     cout<<endl<<"Zipfian:size = "<<size<<" max freq = "<<max_freq<<endl;
+     zipfian_distribution(NodeArray, size);
+     cout<<endl<<"Zipfian:size = "<<size<<endl;
   }
   leftSeq.resize(size);
   rightSeq.resize(size);
   //printArray(NodeArray,ARRAYSIZE);
-  printf("start\n");
+  //printf("start\n");
   timer t;
 
 
-  runParallel(NodeArray, leftSeq, rightSeq, size, t,true);
+  int k = runParallel(NodeArray, leftSeq, rightSeq, size, t, false);
   t_minheap.reset();
   t_findindex.reset();
   t_merge.reset();
@@ -332,10 +350,12 @@ int run_final(int ROUND, int type, size_t max_freq, size_t size){
   t.reset();
   timer t_seq;
   t_seq.reset();
-
+  
+  cout<<"ROUND: "<<k<<endl;
   for(int i=0;i<ROUND;++i){
     runParallel(NodeArray,leftSeq, rightSeq, size, t);
   }
+  cout<<"root: "<<NodeArray[2*size-2]<<endl;
 
   total = reduce(NodeArray.cut(size,2*size-1));
 
@@ -359,16 +379,28 @@ int run_final(int ROUND, int type, size_t max_freq, size_t size){
 
 int main(){
   int ROUND = 5;
- 
+  
   vector<size_t> uniform_size{100000,300000,1000000,3000000,10000000,30000000,100000000,300000000,1000000000,3000000000};
-  vector<size_t> freq_maximum{10,100,1000,10000,100000,1000000};
-  for(int j=0;j<3;++j){
-    for(size_t i=0;i<uniform_size.size();++i){
-      for(size_t k=0;k<freq_maximum.size();++k){
-        run_final(ROUND, j,k,uniform_size[i]);
-      }
+  vector<size_t> freq_maximum{1,10,100,1000,10000,100000,(size_t)1e6,(size_t)1e7,(size_t)1e8,(size_t)1e9,(size_t)1e10};
+  vector<double> lambda{0.001,0.005,0.01,0.05,0.1,0.5,1};
+  //run_final(1,0,freq_maximum.back(),uniform_size.back());
+  /*
+  for(size_t i=0;i<uniform_size.size();++i){
+    for(size_t k=0;k<freq_maximum.size();++k){
+      run_final(ROUND, 0, freq_maximum[k],uniform_size[i]);
     }
   }
-  //run_final(ROUND, 2, uniform_size[0]); 
+  */
+  for(size_t i=0;i<lambda.size();++i){
+    for(size_t k=0;k<uniform_size.size();++k){
+      run_final(ROUND, 1,0,uniform_size[k],lambda[i]);
+    }
+  }
+  /*
+  for(size_t k=0;k<uniform_size.size();++k){
+    run_final(ROUND, 2,0,uniform_size[k]);
+  }
+  */
+  //run_final(ROUND, 1, (int)1e8, uniform_size.back()); 
   return 0;
 }
